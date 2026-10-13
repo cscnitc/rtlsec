@@ -1,0 +1,41 @@
+// sim_main.cpp — Verilator simulation driver for a generated rtlsec harness.
+//
+// Verilator 4.x has no built-in `--main`, and its top-level clock must be
+// driven from C++ rather than by an `always #delay` in the testbench. This
+// main toggles the clock until the testbench calls $finish.
+
+#include "verilated.h"
+
+#ifndef TB_HEADER
+#error "define TB_HEADER to the generated Verilated model header"
+#endif
+#include TB_HEADER
+
+#include <cstdio>
+
+int main(int argc, char** argv) {
+    Verilated::commandArgs(argc, argv);
+    VMODEL* tb = new VMODEL;
+
+    // Run until the testbench finishes (it calls $finish after replaying the
+    // command list, or when the watchdog trips).
+    uint64_t cycles = 0;
+    while (!Verilated::gotFinish()) {
+        tb->clk = 0;
+        tb->eval();
+        tb->clk = 1;
+        tb->eval();
+        cycles++;
+        if (cycles > 20000000ULL) {
+            std::fprintf(stderr, "RTLSEC_HOST_TIMEOUT host cycles=%llu\n",
+                         (unsigned long long)cycles);
+            break;
+        }
+    }
+
+    tb->final();
+    delete tb;
+    std::fprintf(stderr, "RTLSEC_HOST_DONE cycles=%llu\n",
+                 (unsigned long long)cycles);
+    return 0;
+}
